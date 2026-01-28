@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NTS - Gestão de Presenças via Webhook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
+    <!-- Biblioteca para gerar QR Codes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .nts-gradient { background: linear-gradient(135deg, #003359 0%, #001a2d 100%); }
+        .signature-container { touch-action: none; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 1rem; }
+        .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .logo-img { height: 32px; width: auto; object-fit: contain; }
+        #qrcode img { margin: 0 auto; border: 8px solid white; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col">
+
+    <!-- Overlay de Carregamento -->
+    <div id="loading" class="loading-overlay">
+        <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center">
+            <div class="animate-spin rounded-full h-10 w-10 border-4 border-[#003359] border-t-transparent mb-4"></div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-800">Enviando Dados...</p>
+        </div>
+    </div>
+
+    <!-- Barra de Navegação -->
+    <nav class="nts-gradient text-white p-4 shadow-lg sticky top-0 z-50">
+        <div class="max-w-2xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="h-10 px-2 bg-white rounded-lg flex items-center justify-center">
+                    <img src="nts.png" alt="NTS Logo" class="logo-img" onerror="this.src='https://placehold.co/100x40?text=NTS'">
+                </div>
+                <div>
+                    <h1 class="text-sm font-black tracking-tighter uppercase italic leading-none">DDS Global</h1>
+                    <p id="nav-date" class="text-[8px] font-bold opacity-60 uppercase tracking-widest mt-1"></p>
+                </div>
+            </div>
+            <div>
+                <button onclick="toggleSetup()" class="text-white/40 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-1 max-w-2xl mx-auto w-full p-4 lg:p-8">
+        
+        <!-- Vista: Configuração de Webhook -->
+        <div id="view-setup" class="hidden bg-white p-8 rounded-[2rem] border-2 border-dashed border-slate-200 mb-6">
+            <h2 class="text-xl font-black text-slate-800 uppercase italic mb-4 text-center">Configuração do Fluxo</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[9px] font-black uppercase text-slate-400 ml-2">URL do Webhook</label>
+                    <input type="text" id="sp-webhook-url" placeholder="https://prod-..." class="w-full p-4 bg-slate-50 border rounded-xl font-mono text-xs">
+                </div>
+                <button onclick="saveConfig()" class="w-full py-4 nts-gradient text-white font-black rounded-xl uppercase tracking-widest text-xs italic">Guardar Configuração</button>
+            </div>
+        </div>
+
+        <!-- Vista: Menu Principal -->
+        <div id="view-menu" class="space-y-4">
+            <div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
+                <h2 class="text-xl font-black text-slate-800 uppercase italic">Registro de Presença</h2>
+                <p class="text-[10px] text-slate-400 font-bold uppercase mt-2 italic tracking-widest">Escolha como deseja assinar</p>
+            </div>
+
+            <!-- Card de QR Code -->
+            <div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
+                <p class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Acesso Rápido via Telemóvel</p>
+                <div id="qrcode" class="flex justify-center mb-4"></div>
+                <p class="text-xs font-bold text-slate-600 px-4">Aponte a câmara para assinar no seu dispositivo</p>
+            </div>
+
+            <button onclick="changeView('user')" class="w-full bg-white p-10 rounded-[2.5rem] border-2 border-[#003359] shadow-sm hover:scale-[1.01] transition-all flex flex-col items-center text-center group">
+                <div class="w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-[#003359] group-hover:text-white transition-colors">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                </div>
+                <span class="font-black text-slate-800 uppercase text-lg tracking-widest">Assinar neste ecrã</span>
+                <span class="text-[10px] text-slate-400 mt-2 uppercase font-bold italic">Toque para abrir o formulário aqui</span>
+            </button>
+        </div>
+
+        <!-- Vista: Formulário -->
+        <div id="view-user" class="hidden">
+            <div class="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100">
+                <h2 class="text-2xl font-black text-slate-800 uppercase italic mb-8">Dados da Presença</h2>
+                <form id="presence-form" class="space-y-6">
+                    <div>
+                        <label class="text-[9px] font-black uppercase text-slate-400 ml-2">Identificação</label>
+                        <input type="text" id="form-name" required placeholder="Nome Completo" class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#003359] outline-none transition-colors">
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-black uppercase text-slate-400 ml-2">Vínculo / Setor</label>
+                        <select id="form-sector" required class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-black uppercase text-slate-400 ml-2">Assinatura Digital</label>
+                        <div class="signature-container overflow-hidden">
+                            <canvas id="canvas" class="w-full h-44 cursor-crosshair"></canvas>
+                        </div>
+                        <button type="button" onclick="pad.clear()" class="text-[9px] font-black text-slate-400 uppercase mt-2 ml-2 hover:text-red-500">Limpar Assinatura</button>
+                    </div>
+                    <button type="submit" class="w-full nts-gradient text-white font-black py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs italic hover:opacity-90 transition-opacity">Confirmar e Enviar</button>
+                    <button type="button" onclick="changeView('menu')" class="w-full text-[10px] font-bold text-slate-400 uppercase italic">Voltar ao Início</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Sucesso -->
+        <div id="view-success" class="hidden text-center py-20">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full mb-6">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <h2 class="text-3xl font-black text-slate-800 uppercase italic">Concluído!</h2>
+            <p class="text-slate-500 font-bold uppercase mt-3 italic text-sm">Obrigado pela sua participação.</p>
+            <button onclick="location.reload()" class="mt-12 bg-[#003359] text-white px-10 py-5 rounded-full text-[10px] font-black uppercase italic shadow-lg">Novo Registro</button>
+        </div>
+
+    </main>
+
+    <script>
+        const CONFIG_KEY = 'nts_webhook_config';
+        let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || { webhookUrl: '' };
+
+        function saveConfig() {
+            let url = document.getElementById('sp-webhook-url').value.trim();
+            if (!url) return alert("Insira uma URL válida.");
+            url = url.replace(/[\u200B-\u200D\uFEFF]/g, '').trim(); 
+            config.webhookUrl = url;
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+            alert("Configuração guardada com sucesso!");
+            toggleSetup();
+        }
+
+        function toggleSetup() {
+            const setup = document.getElementById('view-setup');
+            setup.classList.toggle('hidden');
+        }
+
+        async function sendData(data) {
+            if (!config.webhookUrl) {
+                alert("Configuração em falta. Clique na engrenagem e cole a URL do Power Automate.");
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const response = await fetch(config.webhookUrl, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: data.name,
+                        sector: data.sector,
+                        signature: data.signature,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                if (response.ok || response.status === 202 || response.type === 'opaque') {
+                    changeView('success');
+                } else {
+                    if (response.status === 401) {
+                        throw new Error("Erro 401: A URL do Webhook expirou ou não tem permissão.");
+                    } else {
+                        throw new Error(`Erro ${response.status}: Falha no servidor.`);
+                    }
+                }
+            } catch (err) {
+                console.error("Erro:", err);
+                alert(err.message || "Falha ao enviar.");
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        let pad;
+        function changeView(view) {
+            document.querySelectorAll('main > div').forEach(el => {
+                if(el.id !== 'view-setup') el.classList.add('hidden');
+            });
+            const target = document.getElementById('view-' + view);
+            if(target) target.classList.remove('hidden');
+            if(view === 'user') setTimeout(initCanvas, 150);
+        }
+
+        function initCanvas() {
+            const canvas = document.getElementById('canvas');
+            if (!canvas) return;
+            const ratio = window.devicePixelRatio || 1;
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+            pad = new SignaturePad(canvas, { penColor: '#001a2d' });
+        }
+
+        function generateQR() {
+            const qrContainer = document.getElementById("qrcode");
+            qrContainer.innerHTML = "";
+            new QRCode(qrContainer, {
+                text: window.location.href,
+                width: 180,
+                height: 180,
+                colorDark : "#003359",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+        function showLoading(show) {
+            const loader = document.getElementById('loading');
+            if(loader) loader.style.display = show ? 'flex' : 'none';
+        }
+
+        document.getElementById('presence-form').onsubmit = (e) => {
+            e.preventDefault();
+            if(!pad || pad.isEmpty()) return alert("Por favor, assine para confirmar a sua presença.");
+            const data = {
+                name: document.getElementById('form-name').value,
+                sector: document.getElementById('form-sector').value,
+                signature: pad.toDataURL()
+            };
+            sendData(data);
+        };
+
+        window.onload = () => {
+            const sectors = ['Convidado Externo', 'Operação', 'Manutenção', 'Técnico', 'SSMA', 'Administrativo', 'Segurança'];
+            const select = document.getElementById('form-sector');
+            if(select) select.innerHTML = sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+            
+            const dateEl = document.getElementById('nav-date');
+            if(dateEl) dateEl.textContent = new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+            
+            generateQR();
+
+            if (config.webhookUrl) {
+                const input = document.getElementById('sp-webhook-url');
+                if(input) input.value = config.webhookUrl;
+            } else {
+                toggleSetup();
+            }
+        };
+    </script>
+</body>
+</html>
