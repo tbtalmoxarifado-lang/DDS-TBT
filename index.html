@@ -1,251 +1,503 @@
-<!DOCTYPE html>
-<html lang="pt-pt">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NTS - Gestão de Presenças via Webhook</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
-    <!-- Biblioteca para gerar QR Codes -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .nts-gradient { background: linear-gradient(135deg, #003359 0%, #001a2d 100%); }
-        .signature-container { touch-action: none; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 1rem; }
-        .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-        .logo-img { height: 32px; width: auto; object-fit: contain; }
-        #qrcode img { margin: 0 auto; border: 8px solid white; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-    </style>
-</head>
-<body class="bg-slate-50 min-h-screen flex flex-col">
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
+import { 
+  Settings, 
+  Smartphone, 
+  Edit3, 
+  ArrowLeft, 
+  CheckCircle2, 
+  ShieldCheck,
+  Printer,
+  ClipboardList,
+  UserCheck,
+  Trash2
+} from 'lucide-react';
 
-    <!-- Overlay de Carregamento -->
-    <div id="loading" class="loading-overlay">
-        <div class="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center">
-            <div class="animate-spin rounded-full h-10 w-10 border-4 border-[#003359] border-t-transparent mb-4"></div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-800">Enviando Dados...</p>
+// Cores Oficiais NTS conforme manual
+const COLORS = {
+  azul: '#003B5C',
+  vermelho: '#F9423A',
+  laranja: '#FF8200',
+  amarelo: '#F6BE00',
+  cinza: '#6D6E71',
+  branco: '#FFFFFF'
+};
+
+const LOGO_URL = 'https://raw.githubusercontent.com/Alimohammadi87/NTS/main/nts.png';
+
+// Configuração Firebase
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'nts-dds-digital-v2';
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('menu'); // 'menu', 'user', 'admin', 'success'
+  const [showSetup, setShowSetup] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [presencas, setPresencas] = useState([]);
+  const [config, setConfig] = useState({ 
+    accessUrl: window.location.href,
+    meetingTheme: 'Segurança no Trabalho',
+    responsible: '' 
+  });
+  
+  const [formData, setFormData] = useState({ name: '', sector: '' });
+  const canvasRef = useRef(null);
+  const isDrawing = useRef(false);
+
+  // Carregar Script do QR Code
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+    script.async = true;
+    document.body.appendChild(script);
+    return () => { if (document.body.contains(script)) document.body.removeChild(script); };
+  }, []);
+
+  // Auth
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
+    const savedConfig = localStorage.getItem('nts_dds_config');
+    if (savedConfig) setConfig(JSON.parse(savedConfig));
+    return () => unsubscribeAuth();
+  }, []);
+
+  // Dados em tempo real
+  useEffect(() => {
+    if (user) {
+      const q = collection(db, 'artifacts', appId, 'public', 'data', 'presencas_dds');
+      const unsubscribeData = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const sorted = data.sort((a, b) => (b.data_hora?.seconds || 0) - (a.data_hora?.seconds || 0));
+        setPresencas(sorted);
+      }, (error) => console.error("Erro no listener:", error));
+      return () => unsubscribeData();
+    }
+  }, [user]);
+
+  // Canvas Drawing
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const startDrawing = (e) => {
+    isDrawing.current = true;
+    const pos = getPos(e);
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing.current) return;
+    const pos = getPos(e);
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.lineTo(pos.x, pos.y);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = COLORS.azul;
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => { isDrawing.current = false; };
+  const clearCanvas = () => {
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    setLoading(true);
+    try {
+      const signature = canvasRef.current.toDataURL();
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'presencas_dds'), {
+        nome: formData.name,
+        setor: formData.sector,
+        tema: config.meetingTheme,
+        responsavel: config.responsible,
+        assinatura: signature,
+        data_hora: serverTimestamp(),
+        uid: user.uid
+      });
+      setView('success');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // QR Code Generation
+  useEffect(() => {
+    if (view === 'menu' && window.QRCode) {
+      const container = document.getElementById('qrcode-box');
+      if (container) {
+        container.innerHTML = '';
+        new window.QRCode(container, {
+          text: config.accessUrl,
+          width: 140,
+          height: 140,
+          colorDark: COLORS.azul,
+          colorLight: "#ffffff"
+        });
+      }
+    }
+  }, [view, config.accessUrl]);
+
+  // Nova lógica de impressão para garantir funcionamento em iframes
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const sectors = ['Operação', 'Manutenção', 'Logística', 'SSMA', 'Administrativo', 'Engenharia', 'Outros'];
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans print:bg-white overflow-x-hidden">
+      {/* Navbar com Logo NTS */}
+      <nav style={{ backgroundColor: COLORS.azul }} className="text-white px-6 py-4 shadow-lg flex justify-between items-center sticky top-0 z-50 print:hidden">
+        <div className="flex items-center gap-4">
+          <img src={LOGO_URL} alt="NTS Logo" className="h-8 brightness-0 invert" />
+          <div className="h-8 w-[1px] bg-white/20 hidden sm:block"></div>
+          <div className="hidden sm:block">
+            <h1 className="text-sm font-black tracking-tight uppercase italic leading-none">DDS Digital</h1>
+            <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Controle de Presença</p>
+          </div>
         </div>
-    </div>
-
-    <!-- Barra de Navegação -->
-    <nav class="nts-gradient text-white p-4 shadow-lg sticky top-0 z-50">
-        <div class="max-w-2xl mx-auto flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <div class="h-10 px-2 bg-white rounded-lg flex items-center justify-center">
-                    <img src="nts.png" alt="NTS Logo" class="logo-img" onerror="this.src='https://placehold.co/100x40?text=NTS'">
-                </div>
-                <div>
-                    <h1 class="text-sm font-black tracking-tighter uppercase italic leading-none">DDS Global</h1>
-                    <p id="nav-date" class="text-[8px] font-bold opacity-60 uppercase tracking-widest mt-1"></p>
-                </div>
-            </div>
-            <div>
-                <button onclick="toggleSetup()" class="text-white/40 hover:text-white transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                </button>
-            </div>
+        <div className="flex gap-2">
+          <button onClick={() => setView(view === 'admin' ? 'menu' : 'admin')} className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Administração">
+            <ClipboardList size={22} />
+          </button>
+          <button onClick={() => setShowSetup(!showSetup)} className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Configurações">
+            <Settings size={22} />
+          </button>
         </div>
-    </nav>
+      </nav>
 
-    <main class="flex-1 max-w-2xl mx-auto w-full p-4 lg:p-8">
+      <main className="max-w-5xl mx-auto p-4 md:p-8 lg:p-10">
         
-        <!-- Vista: Configuração de Webhook -->
-        <div id="view-setup" class="hidden bg-white p-8 rounded-[2rem] border-2 border-dashed border-slate-200 mb-6">
-            <h2 class="text-xl font-black text-slate-800 uppercase italic mb-4 text-center">Configuração do Fluxo</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="text-[9px] font-black uppercase text-slate-400 ml-2">URL do Webhook</label>
-                    <input type="text" id="sp-webhook-url" placeholder="https://prod-..." class="w-full p-4 bg-slate-50 border rounded-xl font-mono text-xs">
-                </div>
-                <button onclick="saveConfig()" class="w-full py-4 nts-gradient text-white font-black rounded-xl uppercase tracking-widest text-xs italic">Guardar Configuração</button>
+        {/* Configurações de Reunião */}
+        {showSetup && (
+          <div className="mb-8 bg-white p-6 rounded-3xl shadow-xl border-l-8 border-[#FF8200] animate-in print:hidden">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-sm font-black uppercase flex items-center gap-2 text-slate-700">
+                <Settings size={18} color={COLORS.laranja} /> Parâmetros da Reunião
+              </h3>
             </div>
-        </div>
-
-        <!-- Vista: Menu Principal -->
-        <div id="view-menu" class="space-y-4">
-            <div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
-                <h2 class="text-xl font-black text-slate-800 uppercase italic">Registro de Presença</h2>
-                <p class="text-[10px] text-slate-400 font-bold uppercase mt-2 italic tracking-widest">Escolha como deseja assinar</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tema do DDS</label>
+                <input 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 ring-blue-500/20 font-medium"
+                  value={config.meetingTheme}
+                  onChange={(e) => setConfig({...config, meetingTheme: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Responsável</label>
+                <input 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 ring-blue-500/20 font-medium"
+                  value={config.responsible}
+                  onChange={(e) => setConfig({...config, responsible: e.target.value})}
+                  placeholder="Nome do condutor"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">URL de Acesso (Link)</label>
+                <input 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 ring-blue-500/20 text-xs text-blue-600 font-mono"
+                  value={config.accessUrl}
+                  onChange={(e) => setConfig({...config, accessUrl: e.target.value})}
+                />
+              </div>
             </div>
-
-            <!-- Card de QR Code -->
-            <div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
-                <p class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Acesso Rápido via Telemóvel</p>
-                <div id="qrcode" class="flex justify-center mb-4"></div>
-                <p class="text-xs font-bold text-slate-600 px-4">Aponte a câmara para assinar no seu dispositivo</p>
-            </div>
-
-            <button onclick="changeView('user')" class="w-full bg-white p-10 rounded-[2.5rem] border-2 border-[#003359] shadow-sm hover:scale-[1.01] transition-all flex flex-col items-center text-center group">
-                <div class="w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-[#003359] group-hover:text-white transition-colors">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                </div>
-                <span class="font-black text-slate-800 uppercase text-lg tracking-widest">Assinar neste ecrã</span>
-                <span class="text-[10px] text-slate-400 mt-2 uppercase font-bold italic">Toque para abrir o formulário aqui</span>
+            <button 
+              onClick={() => { localStorage.setItem('nts_dds_config', JSON.stringify(config)); setShowSetup(false); }}
+              className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-[0.2em] shadow-lg hover:bg-slate-800 transition-all"
+            >
+              Salvar Configurações
             </button>
-        </div>
+          </div>
+        )}
 
-        <!-- Vista: Formulário -->
-        <div id="view-user" class="hidden">
-            <div class="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100">
-                <h2 class="text-2xl font-black text-slate-800 uppercase italic mb-8">Dados da Presença</h2>
-                <form id="presence-form" class="space-y-6">
-                    <div>
-                        <label class="text-[9px] font-black uppercase text-slate-400 ml-2">Identificação</label>
-                        <input type="text" id="form-name" required placeholder="Nome Completo" class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#003359] outline-none transition-colors">
-                    </div>
-                    <div>
-                        <label class="text-[9px] font-black uppercase text-slate-400 ml-2">Vínculo / Setor</label>
-                        <select id="form-sector" required class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none"></select>
-                    </div>
-                    <div>
-                        <label class="text-[9px] font-black uppercase text-slate-400 ml-2">Assinatura Digital</label>
-                        <div class="signature-container overflow-hidden">
-                            <canvas id="canvas" class="w-full h-44 cursor-crosshair"></canvas>
-                        </div>
-                        <button type="button" onclick="pad.clear()" class="text-[9px] font-black text-slate-400 uppercase mt-2 ml-2 hover:text-red-500">Limpar Assinatura</button>
-                    </div>
-                    <button type="submit" class="w-full nts-gradient text-white font-black py-5 rounded-2xl uppercase tracking-widest shadow-xl text-xs italic hover:opacity-90 transition-opacity">Confirmar e Enviar</button>
-                    <button type="button" onclick="changeView('menu')" class="w-full text-[10px] font-bold text-slate-400 uppercase italic">Voltar ao Início</button>
-                </form>
+        {/* View: Menu / Entrada */}
+        {view === 'menu' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch animate-in">
+            <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mb-6 text-[#003B5C] shadow-inner">
+                <Smartphone size={36} />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 mb-3 italic">Registro Mobile</h2>
+              <p className="text-slate-400 text-sm max-w-xs mb-10 leading-relaxed font-medium">Aponte a câmera do seu celular para o código abaixo para assinar digitalmente.</p>
+              
+              <div className="p-8 bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border-2 border-slate-50 relative group">
+                <div id="qrcode-box" className="relative z-10"></div>
+                <div className="absolute inset-0 bg-blue-500/5 blur-3xl rounded-full scale-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              </div>
             </div>
-        </div>
 
-        <!-- Sucesso -->
-        <div id="view-success" class="hidden text-center py-20">
-            <div class="inline-flex items-center justify-center w-20 h-20 bg-emerald-100 text-emerald-500 rounded-full mb-6">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            <div className="flex flex-col gap-6">
+              <div style={{ borderColor: COLORS.azul }} className="bg-white p-8 rounded-[2.5rem] border-t-8 shadow-xl flex-grow flex flex-col justify-center">
+                <h3 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-[0.3em]">Dados da Sessão</h3>
+                <div className="space-y-6">
+                  <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 bg-blue-50 text-[#003B5C] rounded-2xl flex items-center justify-center shadow-sm">
+                      <ClipboardList size={24} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-400">Tema do Dia</p>
+                      <p className="font-black text-xl text-slate-800 leading-tight uppercase italic">{config.meetingTheme || "Segurança"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 bg-orange-50 text-[#FF8200] rounded-2xl flex items-center justify-center shadow-sm">
+                      <UserCheck size={24} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-400">Responsável</p>
+                      <p className="font-bold text-lg text-slate-800">{config.responsible || "Supervisor NTS"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setView('user')}
+                style={{ backgroundColor: COLORS.vermelho }}
+                className="w-full py-10 text-white rounded-[2.5rem] shadow-2xl font-black uppercase italic tracking-[0.2em] flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-95 transition-all group"
+              >
+                <Edit3 size={32} className="group-hover:rotate-12 transition-transform" />
+                Assinar neste Ecrã
+              </button>
             </div>
-            <h2 class="text-3xl font-black text-slate-800 uppercase italic">Concluído!</h2>
-            <p class="text-slate-500 font-bold uppercase mt-3 italic text-sm">Obrigado pela sua participação.</p>
-            <button onclick="location.reload()" class="mt-12 bg-[#003359] text-white px-10 py-5 rounded-full text-[10px] font-black uppercase italic shadow-lg">Novo Registro</button>
-        </div>
+          </div>
+        )}
 
-    </main>
+        {/* View: Relatório / Admin (PREPARAÇÃO PARA IMPRESSÃO) */}
+        {view === 'admin' && (
+          <div className="bg-white p-8 md:p-14 rounded-[3rem] shadow-2xl animate-in border border-slate-100 min-h-[600px] relative">
+            <div className="flex justify-between items-center mb-12 print:hidden">
+              <button onClick={() => setView('menu')} className="flex items-center gap-2 text-slate-400 font-bold uppercase text-xs hover:text-slate-600 transition-colors">
+                <ArrowLeft size={18} /> Menu Principal
+              </button>
+              <button 
+                onClick={handlePrint} 
+                style={{ backgroundColor: COLORS.azul }} 
+                className="px-8 py-4 text-white rounded-2xl font-black uppercase text-xs flex items-center gap-3 shadow-xl hover:brightness-110 active:scale-95 transition-all"
+              >
+                <Printer size={20} /> Gerar PDF / Imprimir
+              </button>
+            </div>
 
-    <script>
-        const CONFIG_KEY = 'nts_webhook_config';
-        let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || { webhookUrl: '' };
+            {/* Cabeçalho do Relatório Impresso */}
+            <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10 mb-10">
+              <div className="space-y-4">
+                <img src={LOGO_URL} alt="NTS" className="h-12 block" />
+                <div>
+                  <h2 className="text-4xl font-black italic text-slate-900 uppercase leading-none">Relatório DDS</h2>
+                  <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Documento de Segurança do Trabalho</p>
+                </div>
+              </div>
+              <div className="text-right pt-2">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Data da Reunião</p>
+                  <p className="text-2xl font-black text-[#003B5C]">{new Date().toLocaleDateString('pt-BR')}</p>
+                </div>
+              </div>
+            </div>
 
-        function saveConfig() {
-            let url = document.getElementById('sp-webhook-url').value.trim();
-            if (!url) return alert("Insira uma URL válida.");
-            url = url.replace(/[\u200B-\u200D\uFEFF]/g, '').trim(); 
-            config.webhookUrl = url;
-            localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-            alert("Configuração guardada com sucesso!");
-            toggleSetup();
-        }
+            {/* Info Box do Relatório */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Tema Abordado</p>
+                <p className="text-xl font-bold text-slate-800 uppercase italic leading-tight">{config.meetingTheme}</p>
+              </div>
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Responsável pela Reunião</p>
+                <p className="text-xl font-bold text-slate-800">{config.responsible || "Equipe NTS"}</p>
+              </div>
+            </div>
 
-        function toggleSetup() {
-            const setup = document.getElementById('view-setup');
-            setup.classList.toggle('hidden');
-        }
-
-        async function sendData(data) {
-            if (!config.webhookUrl) {
-                alert("Configuração em falta. Clique na engrenagem e cole a URL do Power Automate.");
-                return;
-            }
-
-            showLoading(true);
-            try {
-                const response = await fetch(config.webhookUrl, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: data.name,
-                        sector: data.sector,
-                        signature: data.signature,
-                        timestamp: new Date().toISOString()
-                    })
-                });
-
-                if (response.ok || response.status === 202 || response.type === 'opaque') {
-                    changeView('success');
-                } else {
-                    if (response.status === 401) {
-                        throw new Error("Erro 401: A URL do Webhook expirou ou não tem permissão.");
-                    } else {
-                        throw new Error(`Erro ${response.status}: Falha no servidor.`);
-                    }
-                }
-            } catch (err) {
-                console.error("Erro:", err);
-                alert(err.message || "Falha ao enviar.");
-            } finally {
-                showLoading(false);
-            }
-        }
-
-        let pad;
-        function changeView(view) {
-            document.querySelectorAll('main > div').forEach(el => {
-                if(el.id !== 'view-setup') el.classList.add('hidden');
-            });
-            const target = document.getElementById('view-' + view);
-            if(target) target.classList.remove('hidden');
-            if(view === 'user') setTimeout(initCanvas, 150);
-        }
-
-        function initCanvas() {
-            const canvas = document.getElementById('canvas');
-            if (!canvas) return;
-            const ratio = window.devicePixelRatio || 1;
-            canvas.width = canvas.offsetWidth * ratio;
-            canvas.height = canvas.offsetHeight * ratio;
-            canvas.getContext("2d").scale(ratio, ratio);
-            pad = new SignaturePad(canvas, { penColor: '#001a2d' });
-        }
-
-        function generateQR() {
-            const qrContainer = document.getElementById("qrcode");
-            qrContainer.innerHTML = "";
-            new QRCode(qrContainer, {
-                text: window.location.href,
-                width: 180,
-                height: 180,
-                colorDark : "#003359",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H
-            });
-        }
-
-        function showLoading(show) {
-            const loader = document.getElementById('loading');
-            if(loader) loader.style.display = show ? 'flex' : 'none';
-        }
-
-        document.getElementById('presence-form').onsubmit = (e) => {
-            e.preventDefault();
-            if(!pad || pad.isEmpty()) return alert("Por favor, assine para confirmar a sua presença.");
-            const data = {
-                name: document.getElementById('form-name').value,
-                sector: document.getElementById('form-sector').value,
-                signature: pad.toDataURL()
-            };
-            sendData(data);
-        };
-
-        window.onload = () => {
-            const sectors = ['Convidado Externo', 'Operação', 'Manutenção', 'Técnico', 'SSMA', 'Administrativo', 'Segurança'];
-            const select = document.getElementById('form-sector');
-            if(select) select.innerHTML = sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+            {/* Tabela de Presença */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b-2 border-slate-200">
+                    <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] pl-2">Colaborador</th>
+                    <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Setor</th>
+                    <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Hora</th>
+                    <th className="py-5 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] text-center">Assinatura Digital</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {presencas.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-5 font-black text-slate-800 pl-2 uppercase text-sm">{p.nome}</td>
+                      <td className="py-5 text-xs font-bold text-slate-500 uppercase">{p.setor}</td>
+                      <td className="py-5 text-xs font-mono text-slate-400">
+                        {p.data_hora?.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-2 flex justify-center">
+                        <img src={p.assinatura} alt="Assinatura" className="h-10 opacity-90 mix-blend-multiply" />
+                      </td>
+                    </tr>
+                  ))}
+                  {presencas.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="py-20 text-center text-slate-300 font-bold italic text-lg uppercase tracking-widest">Aguardando registros de presença...</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
             
-            const dateEl = document.getElementById('nav-date');
-            if(dateEl) dateEl.textContent = new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-            
-            generateQR();
+            {/* Rodapé de Assinatura (Apenas Impressão) */}
+            <div className="mt-20 hidden print:block pt-16">
+              <div className="flex justify-between items-end gap-10">
+                <div className="flex-1 text-center">
+                  <div className="border-t-2 border-slate-300 pt-3">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Assinatura do Responsável</p>
+                    <p className="text-sm font-black text-slate-800 mt-1 uppercase italic">{config.responsible}</p>
+                  </div>
+                </div>
+                <div className="flex-1 text-center">
+                  <div className="border-t-2 border-slate-300 pt-3">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Responsável SSMA / Testemunha</p>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[8px] text-center text-slate-400 mt-20 uppercase tracking-[0.5em]">Gerado via NTS DDS Digital • Autenticação Eletrônica ID: {appId}</p>
+            </div>
+          </div>
+        )}
 
-            if (config.webhookUrl) {
-                const input = document.getElementById('sp-webhook-url');
-                if(input) input.value = config.webhookUrl;
-            } else {
-                toggleSetup();
-            }
-        };
-    </script>
-</body>
-</html>
+        {/* View: Formulário de Assinatura */}
+        {view === 'user' && (
+          <div className="max-w-xl mx-auto bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl animate-in border border-slate-100">
+            <button onClick={() => setView('menu')} className="mb-8 flex items-center gap-2 text-slate-400 font-bold text-xs uppercase hover:text-slate-600 transition-colors">
+              <ArrowLeft size={18} /> Cancelar
+            </button>
+            <div className="flex items-center gap-4 mb-10">
+              <div className="w-1.5 h-12 bg-[#F9423A] rounded-full"></div>
+              <h2 className="text-3xl font-black text-slate-900 italic uppercase leading-tight">Ficha de Presença</h2>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-wider">Nome Completo</label>
+                <input 
+                  required 
+                  placeholder="Seu nome"
+                  className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl font-bold text-slate-800 outline-none focus:ring-4 ring-blue-500/10 focus:bg-white transition-all uppercase" 
+                  value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-wider">Setor de Atuação</label>
+                <select 
+                  required 
+                  className="w-full p-5 bg-slate-50 border border-slate-200 rounded-3xl font-bold text-slate-800 outline-none focus:ring-4 ring-blue-500/10 focus:bg-white transition-all appearance-none cursor-pointer"
+                  value={formData.sector} onChange={e => setFormData({...formData, sector: e.target.value})}
+                >
+                  <option value="">Selecione sua área...</option>
+                  {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center px-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Assinatura Digital</label>
+                  <button type="button" onClick={clearCanvas} className="text-[10px] font-black uppercase text-[#F9423A] bg-red-50 px-3 py-1 rounded-full hover:bg-red-100 transition-colors flex items-center gap-1">
+                    <Trash2 size={12} /> Limpar
+                  </button>
+                </div>
+                <div className="relative group">
+                  <canvas 
+                    ref={canvasRef} width={500} height={200}
+                    className="w-full h-48 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] touch-none cursor-crosshair group-hover:border-blue-300 transition-colors"
+                    onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
+                  />
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-10 group-active:opacity-0 transition-opacity">
+                    <Edit3 size={40} className="text-slate-400" />
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                style={{ backgroundColor: COLORS.azul }} 
+                className={`w-full py-6 text-white rounded-[2.2rem] font-black uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110'}`}
+              >
+                {loading ? 'Processando...' : 'Confirmar Registro'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* View: Sucesso */}
+        {view === 'success' && (
+          <div className="text-center py-20 animate-in">
+            <div className="bg-emerald-50 text-emerald-500 p-10 rounded-[3rem] inline-block mb-10 shadow-inner">
+              <CheckCircle2 size={80} strokeWidth={3} />
+            </div>
+            <h2 className="text-5xl font-black text-slate-900 mb-4 italic uppercase tracking-tight">Registro Concluído!</h2>
+            <p className="text-slate-400 font-bold mb-14 uppercase text-xs tracking-[0.4em]">Obrigado pela sua participação no DDS</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="bg-slate-900 text-white px-16 py-6 rounded-[2rem] font-black uppercase tracking-[0.2em] text-xs shadow-2xl hover:bg-slate-800 transition-all active:scale-95"
+            >
+              Realizar Novo Registro
+            </button>
+          </div>
+        )}
+
+      </main>
+
+      <footer className="py-12 text-center opacity-40 print:hidden flex flex-col items-center gap-4">
+        <img src={LOGO_URL} alt="NTS Logo" className="h-6 grayscale" />
+        <p className="text-[10px] font-black uppercase tracking-[0.6em]">NTS Portal DDS Digital • {new Date().getFullYear()}</p>
+      </footer>
+
+      {/* CSS Específico para Impressão */}
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: fadeIn 0.5s ease-out forwards; }
+        
+        @media print {
+          @page { margin: 1.5cm; }
+          body { background: white !important; font-size: 12pt; }
+          .print\\:hidden, nav, footer, button, .qrcode-box, #qrcode-box, [title="Administração"], [title="Configurações"] { display: none !important; visibility: hidden !important; }
+          main { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+          .rounded-[3rem], .rounded-[2.5rem], .rounded-3xl, .shadow-2xl, .shadow-xl { border-radius: 0 !important; border: none !important; box-shadow: none !important; }
+          table { width: 100% !important; border-collapse: collapse !important; border: 1px solid #eee !important; }
+          th { background-color: #f8fafc !important; color: #64748b !important; border-bottom: 2px solid #334155 !important; -webkit-print-color-adjust: exact; }
+          td { border-bottom: 1px solid #f1f5f9 !important; }
+          .bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
+          .mix-blend-multiply { mix-blend-mode: multiply !important; }
+          img { max-width: 100%; }
+        }
+      `}</style>
+    </div>
+  );
+}
