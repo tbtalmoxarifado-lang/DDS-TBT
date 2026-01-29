@@ -30,7 +30,7 @@
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900">
 
-    <!-- PAINEL DE CONTROLO (ADMIN) -->
+    <!-- PAINEL DE CONTROLO (ADMIN) - Visível por defeito para evitar erros de carregamento -->
     <div id="adminPanel" class="no-print max-w-5xl mx-auto py-10 px-6 fade-in">
         <header class="mb-10 text-center">
             <h1 class="text-3xl font-black text-slate-800 tracking-tight uppercase">Gestão de Presença NTS</h1>
@@ -164,7 +164,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // CONFIGURAÇÃO SEGURA (Fallbacks para modo local)
+        // CONFIGURAÇÃO SEGURA
         let db, auth, appId;
         const hasFirebase = typeof __firebase_config !== 'undefined';
 
@@ -224,7 +224,6 @@
                 btn.onclick = () => removerParticipante(btn.getAttribute('data-id'));
             });
 
-            // Preenche tabela de impressão (30 linhas fixas)
             let rows = "";
             for(let i=0; i<30; i++) {
                 const p = participantes[i];
@@ -247,7 +246,7 @@
             }
         };
 
-        // Lógica de Desenho (Touch & Mouse)
+        // Lógica de Desenho
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
             const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
@@ -265,15 +264,20 @@
         canvas.addEventListener('touchmove', (e) => { if(!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.stroke(); e.preventDefault(); }, {passive: false});
         canvas.addEventListener('touchend', () => drawing = false);
 
-        // Inicialização de Interface
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('mode') === 'sign') {
-            document.getElementById('adminPanel').classList.add('hidden');
-            document.getElementById('participantView').classList.remove('hidden');
-            document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
-        }
+        // Controlo de UI Robusto
+        const switchView = () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('mode') === 'sign') {
+                document.getElementById('adminPanel').classList.add('hidden');
+                document.getElementById('participantView').classList.remove('hidden');
+                document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registo de Presença';
+            } else {
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('participantView').classList.add('hidden');
+            }
+        };
 
-        // Firebase Auth e Realtime
+        // Firebase Auth
         if (hasFirebase) {
             const initAuth = async () => {
                 try {
@@ -282,7 +286,9 @@
                     } else {
                         await signInAnonymously(auth);
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error("Erro de autenticação:", e);
+                }
             };
             initAuth();
             onAuthStateChanged(auth, (user) => {
@@ -290,12 +296,15 @@
                     onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), (snap) => {
                         participantes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.timestamp - a.timestamp);
                         renderizar();
-                    });
+                    }, (err) => console.error("Erro no snapshot:", err));
                 }
             });
         }
 
-        // Eventos
+        // Inicialização imediata da vista
+        switchView();
+
+        // Eventos de Input
         document.getElementById('inputAssunto').oninput = (e) => { 
             document.getElementById('printAssunto').innerText = e.target.value; 
             atualizarQRCodes(); 
@@ -316,7 +325,7 @@
         document.getElementById('btnPrint').onclick = () => window.print();
         document.getElementById('btnClearCanvas').onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
         document.getElementById('btnClear').onclick = async () => {
-            if(confirm("Deseja apagar todos os registos?")) {
+            if(confirm("Deseja apagar todos os registos de forma permanente?")) {
                 if(hasFirebase) {
                     for(let p of participantes) await removerParticipante(p.id);
                 } else {
@@ -329,6 +338,8 @@
             e.preventDefault();
             const btn = document.getElementById('btnSubmitSign');
             btn.disabled = true;
+            btn.innerText = "A GUARDAR...";
+            
             const data = {
                 nome: document.getElementById('pNome').value.toUpperCase(),
                 setor: document.getElementById('pSetor').value.toUpperCase(),
@@ -336,14 +347,20 @@
                 timestamp: Date.now()
             };
 
-            if (hasFirebase) {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), data);
-            } else {
-                participantes.unshift({id: Date.now().toString(), ...data});
-                renderizar();
+            try {
+                if (hasFirebase) {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), data);
+                } else {
+                    participantes.unshift({id: Date.now().toString(), ...data});
+                    renderizar();
+                }
+                document.getElementById('formContainer').classList.add('hidden');
+                document.getElementById('msgSucesso').classList.remove('hidden');
+            } catch (err) {
+                console.error("Erro ao guardar assinatura:", err);
+                btn.disabled = false;
+                btn.innerText = "ERRO - TENTAR NOVAMENTE";
             }
-            document.getElementById('formContainer').classList.add('hidden');
-            document.getElementById('msgSucesso').classList.remove('hidden');
         };
 
         renderizar();
