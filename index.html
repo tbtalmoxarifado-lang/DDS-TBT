@@ -30,11 +30,11 @@
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900">
 
-    <!-- CAMADA 1: PAINEL DO GERENTE (ADMIN) -->
+    <!-- PAINEL DO GERENTE -->
     <div id="adminPanel" class="no-print max-w-5xl mx-auto py-10 px-6 fade-in hidden">
         <header class="mb-10 text-center">
             <h1 class="text-3xl font-black text-slate-800 tracking-tight uppercase">Gestão de Presença NTS</h1>
-            <p class="text-slate-500 italic">Preencha os campos para ativar o QR Code de assinatura</p>
+            <p class="text-slate-500 italic">Preencha os campos para ativar o QR Code</p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -55,11 +55,11 @@
                         </div>
                     </div>
                     <div class="mt-8 flex gap-4">
-                        <button id="btnTV" onclick="ativarModoTV()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 opacity-50 cursor-not-allowed" disabled>
+                        <button id="btnTV" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 opacity-50 cursor-not-allowed" disabled>
                             <span>📺</span> MODO PROJEÇÃO (TV)
                         </button>
-                        <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-8 py-4 rounded-xl transition-all">
-                            IMPRIMIR LISTA
+                        <button id="btnPrint" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-8 py-4 rounded-xl transition-all">
+                            IMPRIMIR
                         </button>
                     </div>
                 </div>
@@ -67,7 +67,7 @@
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div class="p-6 border-b border-slate-100 flex justify-between items-center">
                         <h2 class="font-bold text-slate-800 uppercase text-sm tracking-widest">Participantes (<span id="contador">0</span>)</h2>
-                        <button onclick="limparDados()" class="text-xs text-red-500 font-bold hover:underline">LIMPAR TUDO</button>
+                        <button id="btnClear" class="text-xs text-red-500 font-bold hover:underline">LIMPAR TUDO</button>
                     </div>
                     <table class="w-full text-left">
                         <thead class="bg-slate-50 text-[10px] uppercase font-black text-slate-400">
@@ -79,7 +79,7 @@
                         </thead>
                         <tbody id="listaAdmin"></tbody>
                     </table>
-                    <div id="msgVazia" class="p-10 text-center text-slate-400 text-sm italic">Nenhuma assinatura registrada até o momento.</div>
+                    <div id="msgVazia" class="p-10 text-center text-slate-400 text-sm italic">Nenhuma assinatura registrada.</div>
                 </div>
             </div>
 
@@ -87,87 +87,83 @@
                 <div id="qrContainer" class="bg-slate-200 rounded-2xl p-6 text-slate-500 text-center transition-all duration-500">
                     <p id="qrStatusText" class="text-xs font-black uppercase tracking-widest mb-4 opacity-80">Aguardando dados...</p>
                     <div id="qrcode-preview" class="bg-white p-4 rounded-xl inline-block mb-4 hidden border-4 border-white shadow-lg"></div>
-                    <p id="qrHint" class="text-xs font-medium px-4">O QR Code aparecerá aqui quando o assunto e responsável forem definidos.</p>
+                    <p id="qrHint" class="text-xs font-medium px-4">O QR Code aparecerá aqui.</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- CAMADA 2: MODO TV (QR CODE GIGANTE) -->
+    <!-- MODO TV -->
     <div id="tvView" class="hidden no-print fixed inset-0 bg-slate-900 z-[100] flex flex-col items-center justify-center p-12 fade-in">
-        <button onclick="fecharModoTV()" class="absolute top-10 left-10 text-slate-500 hover:text-white font-bold flex items-center gap-2">
-            <span>←</span> VOLTAR AO PAINEL
+        <button id="btnCloseTV" class="absolute top-10 left-10 text-slate-500 hover:text-white font-bold flex items-center gap-2">
+            <span>←</span> VOLTAR
         </button>
         <div class="text-center mb-10">
             <h2 id="tvAssunto" class="text-6xl font-black text-white uppercase mb-4">--</h2>
-            <p class="text-blue-400 text-2xl font-bold uppercase">Gestor Responsável: <span id="tvResponsavel" class="text-white">--</span></p>
+            <p class="text-blue-400 text-2xl font-bold uppercase">Gestor: <span id="tvResponsavel" class="text-white">--</span></p>
         </div>
-        <div id="qrcode-tv" class="bg-white p-8 rounded-3xl shadow-[0_0_100px_rgba(59,130,246,0.3)]"></div>
+        <div id="qrcode-tv" class="bg-white p-8 rounded-3xl shadow-lg"></div>
         <div class="mt-12 bg-blue-600 text-white px-10 py-4 rounded-full font-black text-2xl animate-pulse">
-            ESCANEIE COM SEU CELULAR PARA ASSINAR
+            ESCANEIE PARA ASSINAR
         </div>
-        <p id="tvContador" class="mt-8 text-slate-500 text-xl font-bold uppercase">0 Assinaturas confirmadas</p>
+        <p id="tvContador" class="mt-8 text-slate-500 text-xl font-bold uppercase">0 Assinaturas</p>
     </div>
 
-    <!-- CAMADA 3: PÁGINA DO PARTICIPANTE (O QUE O CELULAR ABRE) -->
+    <!-- PÁGINA DO PARTICIPANTE -->
     <div id="participantView" class="hidden fixed inset-0 bg-white z-[200] overflow-y-auto fade-in">
         <div class="max-w-md mx-auto py-10 px-6">
             <div id="formContainer">
                 <header class="text-center mb-8 border-b pb-6">
-                    <div class="bg-blue-600 text-white w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg font-black">NTS</div>
                     <h3 class="text-xl font-black text-slate-800 uppercase tracking-tight">Registro de Presença</h3>
                     <p id="subAssunto" class="mt-2 text-blue-600 font-bold uppercase text-xs px-4 py-1 bg-blue-50 rounded-full inline-block">--</p>
                 </header>
-
                 <form id="formAssinatura" class="space-y-6">
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Nome Completo</label>
-                        <input type="text" id="pNome" required placeholder="Seu nome aqui" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-lg">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Setor / Departamento</label>
-                        <input type="text" id="pSetor" required placeholder="Ex: Manutenção" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 text-center">Assine no quadro abaixo</label>
+                    <input type="text" id="pNome" required placeholder="Nome Completo" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                    <input type="text" id="pSetor" required placeholder="Setor" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                    <div class="text-center">
                         <canvas id="signature-pad" width="400" height="250" class="w-full rounded-2xl shadow-inner border border-slate-200"></canvas>
-                        <button type="button" onclick="limparCanvas()" class="w-full mt-3 text-slate-400 text-[10px] font-black uppercase tracking-widest">Apagar e Refazer</button>
+                        <button type="button" id="btnClearCanvas" class="mt-2 text-[10px] font-black text-slate-400 uppercase">Limpar Assinatura</button>
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-2xl shadow-xl shadow-blue-100 text-lg uppercase transition-all">
-                        CONFIRMAR MINHA PRESENÇA
-                    </button>
+                    <button type="submit" id="btnSubmitSign" class="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl uppercase">Confirmar Presença</button>
                 </form>
             </div>
-
             <div id="msgSucesso" class="hidden text-center py-20 fade-in">
                 <div class="text-7xl mb-6">✅</div>
-                <h4 class="text-2xl font-bold text-slate-800">Assinatura Enviada!</h4>
-                <p class="text-slate-500 mt-2">Sua presença foi registrada com sucesso na lista do gestor.</p>
-                <p class="text-xs text-slate-400 mt-10">Você já pode fechar esta tela.</p>
+                <h4 class="text-2xl font-bold">Enviado com Sucesso!</h4>
             </div>
         </div>
     </div>
 
-    <!-- DOCUMENTO DE IMPRESSÃO (ESCONDIDO NA TELA) -->
+    <!-- DOC IMPRESSÃO -->
     <div id="printDoc" class="print-only">
-        <div class="flex justify-between items-end border-b-4 border-slate-900 pb-4 mb-6">
-            <h1 class="text-2xl font-black uppercase">Lista de Presença Digital</h1>
-            <div class="text-right text-[10px] font-bold uppercase">NTS - Segurança & Treinamento</div>
+        <div class="border-b-4 border-slate-900 pb-2 mb-4">
+            <h1 class="text-xl font-black uppercase">Lista de Presença Digital - NTS</h1>
         </div>
-        <div class="grid grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 border">
-            <div><p class="text-[8px] font-black text-slate-400 uppercase">Assunto</p><p id="printAssunto" class="font-black text-sm uppercase">--</p></div>
-            <div><p class="text-[8px] font-black text-slate-400 uppercase">Responsável</p><p id="printResponsavel" class="font-black text-sm uppercase">--</p></div>
+        <div class="mb-4 text-xs">
+            <p><strong>Assunto:</strong> <span id="printAssunto">--</span></p>
+            <p><strong>Responsável:</strong> <span id="printResponsavel">--</span></p>
         </div>
         <table class="attendance-table">
             <thead>
-                <tr><th width="30">#</th><th align="left" class="px-4">Colaborador</th><th width="120" align="left" class="px-4">Setor</th><th width="180">Assinatura</th></tr>
+                <tr><th width="30">#</th><th>Colaborador</th><th width="100">Setor</th><th width="150">Assinatura</th></tr>
             </thead>
             <tbody id="printRows"></tbody>
         </table>
     </div>
 
-    <script>
-        let participantes = JSON.parse(localStorage.getItem('nts_data_v3')) || [];
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'nts-presenca-v3';
+
+        let userAuthenticated = false;
+        let participantes = [];
         const canvas = document.getElementById('signature-pad');
         const ctx = canvas.getContext('2d');
         let drawing = false;
@@ -175,109 +171,136 @@
         const qrPreview = new QRCode(document.getElementById("qrcode-preview"), { width: 160, height: 160 });
         const qrTV = new QRCode(document.getElementById("qrcode-tv"), { width: 400, height: 400 });
 
-        // SISTEMA DE ROTAS: Verificar se é participante ou gerente
-        function checkRoute() {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('mode') === 'sign') {
-                document.getElementById('adminPanel').classList.add('hidden');
-                document.getElementById('participantView').classList.remove('hidden');
-                document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro Ativo';
-            } else {
-                document.getElementById('adminPanel').classList.remove('hidden');
-            }
-        }
-
-        function atualizarQRCodes() {
+        // Funções de UI
+        const atualizarQRCodes = () => {
             const assunto = document.getElementById('inputAssunto').value.trim();
             const resp = document.getElementById('inputResponsavel').value.trim();
-            
             if (assunto && resp) {
-                const url = window.location.href.split('?')[0] + "?mode=sign";
+                const url = window.location.origin + window.location.pathname + "?mode=sign";
                 qrPreview.clear(); qrPreview.makeCode(url);
                 qrTV.clear(); qrTV.makeCode(url);
-                
                 document.getElementById('qrcode-preview').classList.remove('hidden');
-                document.getElementById('qrContainer').className = "bg-blue-600 rounded-2xl p-6 text-white text-center transition-all duration-500 shadow-xl shadow-blue-200";
-                document.getElementById('qrStatusText').innerText = "CÓDIGO ATIVO";
-                document.getElementById('qrHint').innerText = "Aponte a câmera do celular para este código.";
+                document.getElementById('qrContainer').className = "bg-blue-600 rounded-2xl p-6 text-white text-center shadow-xl";
                 document.getElementById('btnTV').disabled = false;
                 document.getElementById('btnTV').classList.remove('opacity-50', 'cursor-not-allowed');
-                
                 localStorage.setItem('nts_topic', assunto);
             }
-        }
+        };
 
-        // Desenho no Canvas
-        function getPos(e) {
+        const renderizar = () => {
+            document.getElementById('contador').innerText = participantes.length;
+            document.getElementById('tvContador').innerText = `${participantes.length} Assinaturas`;
+            document.getElementById('msgVazia').style.display = participantes.length ? 'none' : 'block';
+            
+            document.getElementById('listaAdmin').innerHTML = participantes.map(p => `
+                <tr class="border-b border-slate-50">
+                    <td class="px-6 py-4 font-bold text-sm">${p.nome}</td>
+                    <td class="px-6 py-4 text-xs text-slate-400 uppercase">${p.setor}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button data-id="${p.id}" class="btn-delete text-red-400 text-[10px] font-black">REMOVER</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.querySelectorAll('.btn-delete').forEach(btn => {
+                btn.onclick = () => removerParticipante(btn.getAttribute('data-id'));
+            });
+
+            let rows = "";
+            for(let i=0; i<25; i++) {
+                const p = participantes[i];
+                rows += `<tr><td align="center">${i+1}</td><td>${p ? p.nome : ''}</td><td>${p ? p.setor : ''}</td><td align="center">${p ? `<img src="${p.assinatura}" style="height:15px">` : ''}</td></tr>`;
+            }
+            document.getElementById('printRows').innerHTML = rows;
+        };
+
+        const removerParticipante = async (id) => {
+            if (!userAuthenticated) return;
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'participantes', id));
+        };
+
+        // Eventos Canvas
+        const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
-        }
+        };
         canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
-        canvas.addEventListener('mousemove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke(); });
+        canvas.addEventListener('mousemove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.stroke(); });
         window.addEventListener('mouseup', () => drawing = false);
         canvas.addEventListener('touchstart', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
         canvas.addEventListener('touchmove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.stroke(); });
-        function limparCanvas() { ctx.clearRect(0,0,canvas.width,canvas.height); }
 
-        // Salvar Assinatura
-        document.getElementById('formAssinatura').onsubmit = function(e) {
-            e.preventDefault();
-            const nova = {
-                id: Date.now(),
-                nome: document.getElementById('pNome').value.toUpperCase(),
-                setor: document.getElementById('pSetor').value.toUpperCase(),
-                assinatura: canvas.toDataURL()
-            };
-            const lista = JSON.parse(localStorage.getItem('nts_data_v3')) || [];
-            lista.push(nova);
-            localStorage.setItem('nts_data_v3', JSON.stringify(lista));
-            document.getElementById('formContainer').classList.add('hidden');
-            document.getElementById('msgSucesso').classList.remove('hidden');
+        // Auth e Firestore
+        const init = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
         };
 
-        function renderizar() {
-            participantes = JSON.parse(localStorage.getItem('nts_data_v3')) || [];
-            document.getElementById('contador').innerText = participantes.length;
-            document.getElementById('tvContador').innerText = `${participantes.length} Assinaturas confirmadas`;
-            document.getElementById('msgVazia').style.display = participantes.length ? 'none' : 'block';
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userAuthenticated = true;
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('mode') === 'sign') {
+                    document.getElementById('participantView').classList.remove('hidden');
+                    document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro';
+                } else {
+                    document.getElementById('adminPanel').classList.remove('hidden');
+                }
 
-            document.getElementById('listaAdmin').innerHTML = participantes.map(p => `
-                <tr class="border-b border-slate-50 hover:bg-slate-50">
-                    <td class="px-6 py-4 font-bold text-sm">${p.nome}</td>
-                    <td class="px-6 py-4 text-xs text-slate-400 uppercase">${p.setor}</td>
-                    <td class="px-6 py-4 text-right"><button onclick="remover(${p.id})" class="text-red-400 hover:text-red-600 font-bold text-[10px]">REMOVER</button></td>
-                </tr>
-            `).join('');
-
-            let rows = "";
-            for(let i=0; i<30; i++) {
-                const p = participantes[i];
-                rows += `<tr><td align="center">${i+1}</td><td>${p ? p.nome : ''}</td><td>${p ? p.setor : ''}</td><td align="center">${p ? `<img src="${p.assinatura}" style="height:20px">` : ''}</td></tr>`;
+                onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), (snap) => {
+                    participantes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.timestamp - a.timestamp);
+                    renderizar();
+                });
             }
-            document.getElementById('printRows').innerHTML = rows;
-        }
+        });
 
-        function remover(id) {
-            participantes = participantes.filter(p => p.id !== id);
-            localStorage.setItem('nts_data_v3', JSON.stringify(participantes));
-            renderizar();
-        }
-
-        function limparDados() { if(confirm("Apagar todos os registros?")) { localStorage.setItem('nts_data_v3', "[]"); renderizar(); } }
-        function ativarModoTV() { 
+        // Vincular botões
+        document.getElementById('inputAssunto').oninput = (e) => {
+            document.getElementById('printAssunto').innerText = e.target.value;
+            atualizarQRCodes();
+        };
+        document.getElementById('inputResponsavel').oninput = (e) => {
+            document.getElementById('printResponsavel').innerText = e.target.value;
+            atualizarQRCodes();
+        };
+        document.getElementById('btnTV').onclick = () => {
             document.getElementById('tvAssunto').innerText = document.getElementById('inputAssunto').value;
             document.getElementById('tvResponsavel').innerText = document.getElementById('inputResponsavel').value;
-            document.getElementById('tvView').classList.remove('hidden'); 
-            window.sync = setInterval(renderizar, 2000); 
-        }
-        function fecharModoTV() { document.getElementById('tvView').classList.add('hidden'); clearInterval(window.sync); }
+            document.getElementById('tvView').classList.remove('hidden');
+        };
+        document.getElementById('btnCloseTV').onclick = () => document.getElementById('tvView').classList.add('hidden');
+        document.getElementById('btnPrint').onclick = () => window.print();
+        document.getElementById('btnClearCanvas').onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
+        document.getElementById('btnClear').onclick = async () => {
+            if(confirm("Limpar tudo?")) {
+                for(const p of participantes) await removerParticipante(p.id);
+            }
+        };
 
-        document.getElementById('inputAssunto').oninput = (e) => { document.getElementById('printAssunto').innerText = e.target.value; atualizarQRCodes(); };
-        document.getElementById('inputResponsavel').oninput = (e) => { document.getElementById('printResponsavel').innerText = e.target.value; atualizarQRCodes(); };
+        document.getElementById('formAssinatura').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnSubmitSign');
+            btn.disabled = true; btn.innerText = "ENVIANDO...";
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), {
+                    nome: document.getElementById('pNome').value.toUpperCase(),
+                    setor: document.getElementById('pSetor').value.toUpperCase(),
+                    assinatura: canvas.toDataURL(),
+                    timestamp: Date.now()
+                });
+                document.getElementById('formContainer').classList.add('hidden');
+                document.getElementById('msgSucesso').classList.remove('hidden');
+            } catch (err) {
+                btn.disabled = false; btn.innerText = "ERRO - TENTE NOVAMENTE";
+            }
+        };
 
-        window.onload = () => { checkRoute(); renderizar(); };
+        init();
     </script>
 </body>
 </html>
