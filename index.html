@@ -131,6 +131,7 @@
                 <div class="text-7xl mb-6">✅</div>
                 <h4 class="text-2xl font-bold">Enviado com Sucesso!</h4>
                 <p class="text-slate-500 mt-2">Sua presença foi registrada.</p>
+                <button onclick="window.location.href=window.location.pathname" class="mt-6 text-blue-500 font-bold underline">Voltar ao início</button>
             </div>
         </div>
     </div>
@@ -263,21 +264,25 @@
             } catch (e) { console.error("Erro auth:", e); }
         };
 
+        // Função para forçar a visibilidade correta
+        const toggleUIMode = () => {
+            const params = new URLSearchParams(window.location.search);
+            const isAdmin = params.get('mode') !== 'sign';
+            
+            if (isAdmin) {
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('participantView').classList.add('hidden');
+            } else {
+                document.getElementById('participantView').classList.remove('hidden');
+                document.getElementById('adminPanel').classList.add('hidden');
+                document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
+            }
+        };
+
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 userAuthenticated = true;
-                const params = new URLSearchParams(window.location.search);
-                
-                // Se estiver no modo assinar
-                if (params.get('mode') === 'sign') {
-                    document.getElementById('participantView').classList.remove('hidden');
-                    document.getElementById('adminPanel').classList.add('hidden');
-                    document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
-                } else {
-                    // Modo Admin padrão
-                    document.getElementById('adminPanel').classList.remove('hidden');
-                    document.getElementById('participantView').classList.add('hidden');
-                }
+                toggleUIMode();
 
                 // Escuta tempo real dos participantes
                 onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), (snap) => {
@@ -335,6 +340,7 @@
         };
 
         // Inicia o processo
+        toggleUIMode(); // Chamada imediata para evitar tela branca
         initAuth();
     </script>
 </body>
