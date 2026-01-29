@@ -30,8 +30,8 @@
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900">
 
-    <!-- PAINEL DO GERENTE -->
-    <div id="adminPanel" class="no-print max-w-5xl mx-auto py-10 px-6 fade-in hidden">
+    <!-- PAINEL DO GERENTE - Removida a classe hidden para forçar abertura -->
+    <div id="adminPanel" class="no-print max-w-5xl mx-auto py-10 px-6 fade-in">
         <header class="mb-10 text-center">
             <h1 class="text-3xl font-black text-slate-800 tracking-tight uppercase">Gestão de Presença NTS</h1>
             <p class="text-slate-500 italic">Preencha os campos para ativar o QR Code</p>
@@ -267,15 +267,16 @@
         // Função para forçar a visibilidade correta
         const toggleUIMode = () => {
             const params = new URLSearchParams(window.location.search);
-            const isAdmin = params.get('mode') !== 'sign';
+            const isSignMode = params.get('mode') === 'sign';
             
-            if (isAdmin) {
-                document.getElementById('adminPanel').classList.remove('hidden');
-                document.getElementById('participantView').classList.add('hidden');
-            } else {
+            if (isSignMode) {
                 document.getElementById('participantView').classList.remove('hidden');
                 document.getElementById('adminPanel').classList.add('hidden');
                 document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
+            } else {
+                // Modo Admin: Garantimos que o Admin está visível e o Participante escondido
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('participantView').classList.add('hidden');
             }
         };
 
