@@ -130,6 +130,7 @@
             <div id="msgSucesso" class="hidden text-center py-20 fade-in">
                 <div class="text-7xl mb-6">✅</div>
                 <h4 class="text-2xl font-bold">Enviado com Sucesso!</h4>
+                <p class="text-slate-500 mt-2">Sua presença foi registrada.</p>
             </div>
         </div>
     </div>
@@ -156,6 +157,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Inicialização Segura do Firebase
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -168,18 +170,25 @@
         const ctx = canvas.getContext('2d');
         let drawing = false;
 
-        const qrPreview = new QRCode(document.getElementById("qrcode-preview"), { width: 160, height: 160 });
-        const qrTV = new QRCode(document.getElementById("qrcode-tv"), { width: 400, height: 400 });
+        // QR Codes
+        const qrPreviewContainer = document.getElementById("qrcode-preview");
+        const qrTVContainer = document.getElementById("qrcode-tv");
+        let qrPreview, qrTV;
 
-        // Funções de UI
+        const setupQRCodes = () => {
+            if (!qrPreview) qrPreview = new QRCode(qrPreviewContainer, { width: 160, height: 160 });
+            if (!qrTV) qrTV = new QRCode(qrTVContainer, { width: 400, height: 400 });
+        };
+
         const atualizarQRCodes = () => {
+            setupQRCodes();
             const assunto = document.getElementById('inputAssunto').value.trim();
             const resp = document.getElementById('inputResponsavel').value.trim();
             if (assunto && resp) {
                 const url = window.location.origin + window.location.pathname + "?mode=sign";
                 qrPreview.clear(); qrPreview.makeCode(url);
                 qrTV.clear(); qrTV.makeCode(url);
-                document.getElementById('qrcode-preview').classList.remove('hidden');
+                qrPreviewContainer.classList.remove('hidden');
                 document.getElementById('qrContainer').className = "bg-blue-600 rounded-2xl p-6 text-white text-center shadow-xl";
                 document.getElementById('btnTV').disabled = false;
                 document.getElementById('btnTV').classList.remove('opacity-50', 'cursor-not-allowed');
@@ -197,7 +206,7 @@
                     <td class="px-6 py-4 font-bold text-sm">${p.nome}</td>
                     <td class="px-6 py-4 text-xs text-slate-400 uppercase">${p.setor}</td>
                     <td class="px-6 py-4 text-right">
-                        <button data-id="${p.id}" class="btn-delete text-red-400 text-[10px] font-black">REMOVER</button>
+                        <button data-id="${p.id}" class="btn-delete text-red-400 text-[10px] font-black hover:text-red-600">REMOVER</button>
                     </td>
                 </tr>
             `).join('');
@@ -209,57 +218,76 @@
             let rows = "";
             for(let i=0; i<25; i++) {
                 const p = participantes[i];
-                rows += `<tr><td align="center">${i+1}</td><td>${p ? p.nome : ''}</td><td>${p ? p.setor : ''}</td><td align="center">${p ? `<img src="${p.assinatura}" style="height:15px">` : ''}</td></tr>`;
+                rows += `<tr><td align="center">${i+1}</td><td>${p ? p.nome : ''}</td><td>${p ? p.setor : ''}</td><td align="center">${p ? `<img src="${p.assinatura}" style="height:15px; mix-blend-mode: multiply;">` : ''}</td></tr>`;
             }
             document.getElementById('printRows').innerHTML = rows;
         };
 
         const removerParticipante = async (id) => {
             if (!userAuthenticated) return;
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'participantes', id));
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'participantes', id));
+            } catch (e) { console.error("Erro ao remover:", e); }
         };
 
-        // Eventos Canvas
+        // Assinatura (Canvas)
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
+            const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+            const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+            return { 
+                x: (clientX - rect.left) * (canvas.width / rect.width), 
+                y: (clientY - rect.top) * (canvas.height / rect.height) 
+            };
         };
-        canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
-        canvas.addEventListener('mousemove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.stroke(); });
-        window.addEventListener('mouseup', () => drawing = false);
-        canvas.addEventListener('touchstart', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
-        canvas.addEventListener('touchmove', (e) => { if(!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.stroke(); });
 
-        // Auth e Firestore
-        const init = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-                await signInAnonymously(auth);
-            }
+        const startDraw = (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); };
+        const moveDraw = (e) => { if(!drawing) return; if(e.cancelable) e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.stroke(); };
+        const endDraw = () => { drawing = false; };
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', moveDraw);
+        window.addEventListener('mouseup', endDraw);
+        canvas.addEventListener('touchstart', startDraw, { passive: false });
+        canvas.addEventListener('touchmove', moveDraw, { passive: false });
+        canvas.addEventListener('touchend', endDraw);
+
+        // Fluxo de Inicialização
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) { console.error("Erro auth:", e); }
         };
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 userAuthenticated = true;
                 const params = new URLSearchParams(window.location.search);
+                
+                // Se estiver no modo assinar
                 if (params.get('mode') === 'sign') {
                     document.getElementById('participantView').classList.remove('hidden');
-                    document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro';
+                    document.getElementById('adminPanel').classList.add('hidden');
+                    document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
                 } else {
+                    // Modo Admin padrão
                     document.getElementById('adminPanel').classList.remove('hidden');
+                    document.getElementById('participantView').classList.add('hidden');
                 }
 
+                // Escuta tempo real dos participantes
                 onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), (snap) => {
                     participantes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.timestamp - a.timestamp);
                     renderizar();
-                });
+                }, (err) => console.error("Erro snapshot:", err));
             }
         });
 
-        // Vincular botões
+        // Eventos de Input e Botões
         document.getElementById('inputAssunto').oninput = (e) => {
             document.getElementById('printAssunto').innerText = e.target.value;
             atualizarQRCodes();
@@ -276,16 +304,20 @@
         document.getElementById('btnCloseTV').onclick = () => document.getElementById('tvView').classList.add('hidden');
         document.getElementById('btnPrint').onclick = () => window.print();
         document.getElementById('btnClearCanvas').onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
+        
         document.getElementById('btnClear').onclick = async () => {
-            if(confirm("Limpar tudo?")) {
-                for(const p of participantes) await removerParticipante(p.id);
+            if(confirm("Tem certeza que deseja remover todos os registros?")) {
+                const promises = participantes.map(p => removerParticipante(p.id));
+                await Promise.all(promises);
             }
         };
 
         document.getElementById('formAssinatura').onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('btnSubmitSign');
-            btn.disabled = true; btn.innerText = "ENVIANDO...";
+            btn.disabled = true; 
+            btn.innerText = "REGISTRANDO...";
+
             try {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), {
                     nome: document.getElementById('pNome').value.toUpperCase(),
@@ -296,11 +328,14 @@
                 document.getElementById('formContainer').classList.add('hidden');
                 document.getElementById('msgSucesso').classList.remove('hidden');
             } catch (err) {
-                btn.disabled = false; btn.innerText = "ERRO - TENTE NOVAMENTE";
+                console.error(err);
+                btn.disabled = false; 
+                btn.innerText = "ERRO - TENTE NOVAMENTE";
             }
         };
 
-        init();
+        // Inicia o processo
+        initAuth();
     </script>
 </body>
 </html>
