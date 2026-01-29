@@ -30,11 +30,11 @@
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900">
 
-    <!-- PAINEL DO GERENTE - Removida a classe hidden para forçar abertura -->
+    <!-- PAINEL DE CONTROLO (ADMIN) -->
     <div id="adminPanel" class="no-print max-w-5xl mx-auto py-10 px-6 fade-in">
         <header class="mb-10 text-center">
             <h1 class="text-3xl font-black text-slate-800 tracking-tight uppercase">Gestão de Presença NTS</h1>
-            <p class="text-slate-500 italic">Preencha os campos para ativar o QR Code</p>
+            <p class="text-slate-500 italic">Preencha os dados abaixo para gerar a lista</p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -59,7 +59,7 @@
                             <span>📺</span> MODO PROJEÇÃO (TV)
                         </button>
                         <button id="btnPrint" class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-8 py-4 rounded-xl transition-all">
-                            IMPRIMIR
+                            IMPRIMIR PDF
                         </button>
                     </div>
                 </div>
@@ -79,15 +79,20 @@
                         </thead>
                         <tbody id="listaAdmin"></tbody>
                     </table>
-                    <div id="msgVazia" class="p-10 text-center text-slate-400 text-sm italic">Nenhuma assinatura registrada.</div>
+                    <div id="msgVazia" class="p-10 text-center text-slate-400 text-sm italic">Nenhuma assinatura registada.</div>
                 </div>
+                
+                <!-- Botão de simulação para o editor -->
+                <button onclick="window.location.search = '?mode=sign'" class="w-full py-2 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 font-bold text-xs uppercase hover:bg-slate-100 transition-all">
+                    Testar Tela de Assinatura (Participante)
+                </button>
             </div>
 
             <div class="space-y-6">
                 <div id="qrContainer" class="bg-slate-200 rounded-2xl p-6 text-slate-500 text-center transition-all duration-500">
                     <p id="qrStatusText" class="text-xs font-black uppercase tracking-widest mb-4 opacity-80">Aguardando dados...</p>
                     <div id="qrcode-preview" class="bg-white p-4 rounded-xl inline-block mb-4 hidden border-4 border-white shadow-lg"></div>
-                    <p id="qrHint" class="text-xs font-medium px-4">O QR Code aparecerá aqui.</p>
+                    <p id="qrHint" class="text-xs font-medium px-4">O QR Code aparecerá assim que preencher o assunto e responsável.</p>
                 </div>
             </div>
         </div>
@@ -114,29 +119,29 @@
         <div class="max-w-md mx-auto py-10 px-6">
             <div id="formContainer">
                 <header class="text-center mb-8 border-b pb-6">
-                    <h3 class="text-xl font-black text-slate-800 uppercase tracking-tight">Registro de Presença</h3>
+                    <h3 class="text-xl font-black text-slate-800 uppercase tracking-tight">Registo de Presença</h3>
                     <p id="subAssunto" class="mt-2 text-blue-600 font-bold uppercase text-xs px-4 py-1 bg-blue-50 rounded-full inline-block">--</p>
                 </header>
                 <form id="formAssinatura" class="space-y-6">
-                    <input type="text" id="pNome" required placeholder="Nome Completo" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold">
-                    <input type="text" id="pSetor" required placeholder="Setor" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                    <input type="text" id="pNome" required placeholder="Nome Completo" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="pSetor" required placeholder="Setor" class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-blue-500">
                     <div class="text-center">
                         <canvas id="signature-pad" width="400" height="250" class="w-full rounded-2xl shadow-inner border border-slate-200"></canvas>
                         <button type="button" id="btnClearCanvas" class="mt-2 text-[10px] font-black text-slate-400 uppercase">Limpar Assinatura</button>
                     </div>
-                    <button type="submit" id="btnSubmitSign" class="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl uppercase">Confirmar Presença</button>
+                    <button type="submit" id="btnSubmitSign" class="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl uppercase active:scale-95 transition-transform">Confirmar Presença</button>
                 </form>
             </div>
             <div id="msgSucesso" class="hidden text-center py-20 fade-in">
                 <div class="text-7xl mb-6">✅</div>
                 <h4 class="text-2xl font-bold">Enviado com Sucesso!</h4>
-                <p class="text-slate-500 mt-2">Sua presença foi registrada.</p>
-                <button onclick="window.location.href=window.location.pathname" class="mt-6 text-blue-500 font-bold underline">Voltar ao início</button>
+                <p class="text-slate-500 mt-2">A sua presença foi registada.</p>
+                <button onclick="window.location.search = ''" class="mt-8 text-blue-600 font-bold text-sm">Voltar ao Painel Principal</button>
             </div>
         </div>
     </div>
 
-    <!-- DOC IMPRESSÃO -->
+    <!-- DOCUMENTO PARA IMPRESSÃO -->
     <div id="printDoc" class="print-only">
         <div class="border-b-4 border-slate-900 pb-2 mb-4">
             <h1 class="text-xl font-black uppercase">Lista de Presença Digital - NTS</h1>
@@ -144,6 +149,7 @@
         <div class="mb-4 text-xs">
             <p><strong>Assunto:</strong> <span id="printAssunto">--</span></p>
             <p><strong>Responsável:</strong> <span id="printResponsavel">--</span></p>
+            <p><strong>Data:</strong> <span id="printData">--</span></p>
         </div>
         <table class="attendance-table">
             <thead>
@@ -158,27 +164,29 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Inicialização Segura do Firebase
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'nts-presenca-v3';
+        // CONFIGURAÇÃO SEGURA (Fallbacks para modo local)
+        let db, auth, appId;
+        const hasFirebase = typeof __firebase_config !== 'undefined';
 
-        let userAuthenticated = false;
+        if (hasFirebase) {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'nts-presenca-v3';
+        }
+
         let participantes = [];
         const canvas = document.getElementById('signature-pad');
         const ctx = canvas.getContext('2d');
         let drawing = false;
 
         // QR Codes
-        const qrPreviewContainer = document.getElementById("qrcode-preview");
-        const qrTVContainer = document.getElementById("qrcode-tv");
         let qrPreview, qrTV;
 
         const setupQRCodes = () => {
-            if (!qrPreview) qrPreview = new QRCode(qrPreviewContainer, { width: 160, height: 160 });
-            if (!qrTV) qrTV = new QRCode(qrTVContainer, { width: 400, height: 400 });
+            if (!qrPreview) qrPreview = new QRCode(document.getElementById("qrcode-preview"), { width: 160, height: 160 });
+            if (!qrTV) qrTV = new QRCode(document.getElementById("qrcode-tv"), { width: 400, height: 400 });
         };
 
         const atualizarQRCodes = () => {
@@ -189,7 +197,7 @@
                 const url = window.location.origin + window.location.pathname + "?mode=sign";
                 qrPreview.clear(); qrPreview.makeCode(url);
                 qrTV.clear(); qrTV.makeCode(url);
-                qrPreviewContainer.classList.remove('hidden');
+                document.getElementById("qrcode-preview").classList.remove('hidden');
                 document.getElementById('qrContainer').className = "bg-blue-600 rounded-2xl p-6 text-white text-center shadow-xl";
                 document.getElementById('btnTV').disabled = false;
                 document.getElementById('btnTV').classList.remove('opacity-50', 'cursor-not-allowed');
@@ -216,22 +224,30 @@
                 btn.onclick = () => removerParticipante(btn.getAttribute('data-id'));
             });
 
+            // Preenche tabela de impressão (30 linhas fixas)
             let rows = "";
-            for(let i=0; i<25; i++) {
+            for(let i=0; i<30; i++) {
                 const p = participantes[i];
-                rows += `<tr><td align="center">${i+1}</td><td>${p ? p.nome : ''}</td><td>${p ? p.setor : ''}</td><td align="center">${p ? `<img src="${p.assinatura}" style="height:15px; mix-blend-mode: multiply;">` : ''}</td></tr>`;
+                rows += `<tr>
+                    <td align="center">${i+1}</td>
+                    <td>${p ? p.nome : ''}</td>
+                    <td>${p ? p.setor : ''}</td>
+                    <td align="center">${p ? `<img src="${p.assinatura}" style="height:20px; mix-blend-mode: multiply;">` : ''}</td>
+                </tr>`;
             }
             document.getElementById('printRows').innerHTML = rows;
         };
 
         const removerParticipante = async (id) => {
-            if (!userAuthenticated) return;
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'participantes', id));
-            } catch (e) { console.error("Erro ao remover:", e); }
+            if (hasFirebase) {
+                try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'participantes', id)); } catch (e) {}
+            } else {
+                participantes = participantes.filter(p => p.id !== id);
+                renderizar();
+            }
         };
 
-        // Assinatura (Canvas)
+        // Lógica de Desenho (Touch & Mouse)
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
             const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
@@ -242,65 +258,54 @@
             };
         };
 
-        const startDraw = (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); };
-        const moveDraw = (e) => { if(!drawing) return; if(e.cancelable) e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.stroke(); };
-        const endDraw = () => { drawing = false; };
+        canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); });
+        canvas.addEventListener('mousemove', (e) => { if(!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.stroke(); });
+        window.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('touchstart', (e) => { drawing = true; ctx.beginPath(); const p = getPos(e); ctx.moveTo(p.x, p.y); e.preventDefault(); }, {passive: false});
+        canvas.addEventListener('touchmove', (e) => { if(!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.lineWidth = 3; ctx.stroke(); e.preventDefault(); }, {passive: false});
+        canvas.addEventListener('touchend', () => drawing = false);
 
-        canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('mousemove', moveDraw);
-        window.addEventListener('mouseup', endDraw);
-        canvas.addEventListener('touchstart', startDraw, { passive: false });
-        canvas.addEventListener('touchmove', moveDraw, { passive: false });
-        canvas.addEventListener('touchend', endDraw);
+        // Inicialização de Interface
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('mode') === 'sign') {
+            document.getElementById('adminPanel').classList.add('hidden');
+            document.getElementById('participantView').classList.remove('hidden');
+            document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
+        }
 
-        // Fluxo de Inicialização
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+        // Firebase Auth e Realtime
+        if (hasFirebase) {
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (e) {}
+            };
+            initAuth();
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), (snap) => {
+                        participantes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.timestamp - a.timestamp);
+                        renderizar();
+                    });
                 }
-            } catch (e) { console.error("Erro auth:", e); }
+            });
+        }
+
+        // Eventos
+        document.getElementById('inputAssunto').oninput = (e) => { 
+            document.getElementById('printAssunto').innerText = e.target.value; 
+            atualizarQRCodes(); 
         };
-
-        // Função para forçar a visibilidade correta
-        const toggleUIMode = () => {
-            const params = new URLSearchParams(window.location.search);
-            const isSignMode = params.get('mode') === 'sign';
-            
-            if (isSignMode) {
-                document.getElementById('participantView').classList.remove('hidden');
-                document.getElementById('adminPanel').classList.add('hidden');
-                document.getElementById('subAssunto').innerText = localStorage.getItem('nts_topic') || 'Registro de Presença';
-            } else {
-                // Modo Admin: Garantimos que o Admin está visível e o Participante escondido
-                document.getElementById('adminPanel').classList.remove('hidden');
-                document.getElementById('participantView').classList.add('hidden');
-            }
+        document.getElementById('inputResponsavel').oninput = (e) => { 
+            document.getElementById('printResponsavel').innerText = e.target.value; 
+            atualizarQRCodes(); 
         };
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                userAuthenticated = true;
-                toggleUIMode();
-
-                // Escuta tempo real dos participantes
-                onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), (snap) => {
-                    participantes = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.timestamp - a.timestamp);
-                    renderizar();
-                }, (err) => console.error("Erro snapshot:", err));
-            }
-        });
-
-        // Eventos de Input e Botões
-        document.getElementById('inputAssunto').oninput = (e) => {
-            document.getElementById('printAssunto').innerText = e.target.value;
-            atualizarQRCodes();
-        };
-        document.getElementById('inputResponsavel').oninput = (e) => {
-            document.getElementById('printResponsavel').innerText = e.target.value;
-            atualizarQRCodes();
+        document.getElementById('inputData').oninput = (e) => {
+            document.getElementById('printData').innerText = e.target.value;
         };
         document.getElementById('btnTV').onclick = () => {
             document.getElementById('tvAssunto').innerText = document.getElementById('inputAssunto').value;
@@ -310,39 +315,38 @@
         document.getElementById('btnCloseTV').onclick = () => document.getElementById('tvView').classList.add('hidden');
         document.getElementById('btnPrint').onclick = () => window.print();
         document.getElementById('btnClearCanvas').onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
-        
         document.getElementById('btnClear').onclick = async () => {
-            if(confirm("Tem certeza que deseja remover todos os registros?")) {
-                const promises = participantes.map(p => removerParticipante(p.id));
-                await Promise.all(promises);
+            if(confirm("Deseja apagar todos os registos?")) {
+                if(hasFirebase) {
+                    for(let p of participantes) await removerParticipante(p.id);
+                } else {
+                    participantes = []; renderizar();
+                }
             }
         };
 
         document.getElementById('formAssinatura').onsubmit = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('btnSubmitSign');
-            btn.disabled = true; 
-            btn.innerText = "REGISTRANDO...";
+            btn.disabled = true;
+            const data = {
+                nome: document.getElementById('pNome').value.toUpperCase(),
+                setor: document.getElementById('pSetor').value.toUpperCase(),
+                assinatura: canvas.toDataURL(),
+                timestamp: Date.now()
+            };
 
-            try {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), {
-                    nome: document.getElementById('pNome').value.toUpperCase(),
-                    setor: document.getElementById('pSetor').value.toUpperCase(),
-                    assinatura: canvas.toDataURL(),
-                    timestamp: Date.now()
-                });
-                document.getElementById('formContainer').classList.add('hidden');
-                document.getElementById('msgSucesso').classList.remove('hidden');
-            } catch (err) {
-                console.error(err);
-                btn.disabled = false; 
-                btn.innerText = "ERRO - TENTE NOVAMENTE";
+            if (hasFirebase) {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'participantes'), data);
+            } else {
+                participantes.unshift({id: Date.now().toString(), ...data});
+                renderizar();
             }
+            document.getElementById('formContainer').classList.add('hidden');
+            document.getElementById('msgSucesso').classList.remove('hidden');
         };
 
-        // Inicia o processo
-        toggleUIMode(); // Chamada imediata para evitar tela branca
-        initAuth();
+        renderizar();
     </script>
 </body>
 </html>
